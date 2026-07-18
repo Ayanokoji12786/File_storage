@@ -13,6 +13,12 @@ export const STORAGE_QUOTA = 2 * 1024 * 1024 * 1024 // 2 GB
 /** Files shown per page in the file browser. */
 export const PAGE_SIZE = 12
 
+/**
+ * Length of the email OTP code. Must match the Supabase project's
+ * "Email OTP Length" setting (Authentication → Providers → Email).
+ */
+export const OTP_LENGTH = 8
+
 /** Ordered list of categories (drives the dashboard + filters). */
 export const FILE_CATEGORIES: FileCategory[] = [
   'image',

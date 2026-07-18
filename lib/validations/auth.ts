@@ -1,5 +1,7 @@
 import * as z from 'zod'
 
+import { OTP_LENGTH } from '@/lib/constants'
+
 export const emailSchema = z.object({
   email: z.email({ error: 'Enter a valid email address' }),
 })
@@ -13,7 +15,10 @@ export const signUpSchema = z.object({
 })
 
 export const otpSchema = z.object({
-  token: z.string().regex(/^\d{6}$/, { error: 'Enter the 6-digit code' }),
+  token: z
+    .string()
+    .regex(/^\d+$/, { error: 'Code must be digits only' })
+    .length(OTP_LENGTH, { error: `Enter the ${OTP_LENGTH}-digit code` }),
 })
 
 export type EmailInput = z.infer<typeof emailSchema>

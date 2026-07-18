@@ -11,6 +11,7 @@ import {
   InputOTPSlot,
 } from '@/components/ui/input-otp'
 import { resendOtp, verifyOtp, type AuthActionState } from '@/lib/actions/auth'
+import { OTP_LENGTH } from '@/lib/constants'
 
 export function VerifyForm() {
   const [token, setToken] = useState('')
@@ -43,7 +44,7 @@ export function VerifyForm() {
 
         <div className="flex justify-center">
           <InputOTP
-            maxLength={6}
+            maxLength={OTP_LENGTH}
             value={token}
             onChange={setToken}
             onComplete={() => formRef.current?.requestSubmit()}
@@ -51,7 +52,7 @@ export function VerifyForm() {
             autoFocus
           >
             <InputOTPGroup>
-              {[0, 1, 2, 3, 4, 5].map((i) => (
+              {Array.from({ length: OTP_LENGTH }, (_, i) => (
                 <InputOTPSlot key={i} index={i} />
               ))}
             </InputOTPGroup>
@@ -67,7 +68,7 @@ export function VerifyForm() {
         <Button
           type="submit"
           className="w-full"
-          disabled={verifying || token.length < 6}
+          disabled={verifying || token.length < OTP_LENGTH}
         >
           {verifying && <Loader2 className="size-4 animate-spin" />}
           Verify &amp; continue
