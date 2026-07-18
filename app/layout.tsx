@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Geist_Mono, Poppins } from 'next/font/google'
 
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -8,10 +8,12 @@ import { ThemeProvider } from '@/providers/theme-provider'
 
 import './globals.css'
 
-// Note: the CSS variable is `--font-sans` so it matches `@theme` in globals.css.
-const geistSans = Geist({
+// Poppins gives the rounded, friendly headings the StoreIt look uses.
+// The CSS variable is `--font-sans` so it matches `@theme` in globals.css.
+const poppins = Poppins({
   variable: '--font-sans',
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
 })
 
 const geistMono = Geist_Mono({
@@ -36,12 +38,12 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${poppins.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >

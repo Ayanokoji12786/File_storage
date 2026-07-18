@@ -15,7 +15,7 @@ export default async function AppLayout({
     <div className="flex min-h-dvh">
       <aside className="hidden w-64 shrink-0 border-r lg:block">
         <div className="sticky top-0 h-dvh">
-          <AppSidebar />
+          <AppSidebar user={user} />
         </div>
       </aside>
 

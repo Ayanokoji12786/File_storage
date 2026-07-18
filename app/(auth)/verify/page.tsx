@@ -1,13 +1,6 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { VerifyForm } from '@/features/auth/components/verify-form'
 import { getPendingAuth } from '@/lib/auth/pending-email'
 import { OTP_LENGTH } from '@/lib/constants'
@@ -20,18 +13,16 @@ export default async function VerifyPage() {
   const { email } = pending
 
   return (
-    <Card>
-      <CardHeader className="text-center">
-        <CardTitle className="text-xl">Check your inbox</CardTitle>
-        <CardDescription>
-          We emailed{' '}
-          <span className="font-medium text-foreground">{email}</span>. Enter the{' '}
-          {OTP_LENGTH}-digit code below, or just click the link in the email.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <div>
+      <h1 className="text-3xl font-bold tracking-tight">Check your inbox</h1>
+      <p className="mt-2 text-muted-foreground">
+        We emailed{' '}
+        <span className="font-medium text-foreground">{email}</span>. Enter the{' '}
+        {OTP_LENGTH}-digit code below, or just click the link in the email.
+      </p>
+      <div className="mt-8">
         <VerifyForm />
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

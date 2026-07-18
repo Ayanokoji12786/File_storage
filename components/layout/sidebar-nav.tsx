@@ -86,11 +86,12 @@ function NavLink({
       href={href}
       onClick={onNavigate}
       className={cn(
-        'flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
-        active && 'bg-accent font-medium text-foreground',
+        'flex items-center gap-3 rounded-full px-4 py-2.5 font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
+        active &&
+          'bg-primary text-primary-foreground shadow-sm shadow-primary/25 hover:bg-primary hover:text-primary-foreground',
       )}
     >
-      <Icon className="size-4" />
+      <Icon className="size-[18px]" />
       {label}
     </Link>
   )

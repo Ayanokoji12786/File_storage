@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Menu } from 'lucide-react'
+import { LogOut, Menu } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -10,11 +10,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
+import { signOut } from '@/lib/actions/auth'
 import type { AuthUser } from '@/types'
 
 import { AppSidebar } from './app-sidebar'
 import { ThemeToggle } from './theme-toggle'
-import { UserMenu } from './user-menu'
 
 export function AppTopbar({ user }: { user: AuthUser }) {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -35,14 +35,24 @@ export function AppTopbar({ user }: { user: AuthUser }) {
         </SheetTrigger>
         <SheetContent side="left" className="w-72 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <AppSidebar onNavigate={() => setMobileOpen(false)} />
+          <AppSidebar user={user} onNavigate={() => setMobileOpen(false)} />
         </SheetContent>
       </Sheet>
 
       <div className="flex-1" />
 
       <ThemeToggle />
-      <UserMenu user={user} />
+      <form action={signOut}>
+        <Button
+          variant="ghost"
+          size="icon"
+          type="submit"
+          className="text-primary"
+          aria-label="Sign out"
+        >
+          <LogOut className="size-5" />
+        </Button>
+      </form>
     </header>
   )
 }
