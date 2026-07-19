@@ -13,6 +13,21 @@ export function formatBytes(bytes: number, decimals = 1): string {
 }
 
 /**
+ * Deterministic date formatting. A fixed locale + UTC timezone guarantees the
+ * server and client render the exact same string (avoiding hydration
+ * mismatches from `toLocaleDateString()`'s environment-dependent output).
+ * e.g. "19 Jul 2026".
+ */
+export function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+/**
  * Derive our coarse category from a MIME type, falling back to the file
  * extension when the MIME type is missing or generic (e.g. octet-stream).
  */

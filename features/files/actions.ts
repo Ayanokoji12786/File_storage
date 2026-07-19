@@ -1,11 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import * as z from 'zod'
 
 import { requireUser } from '@/lib/dal'
 import { getFileCategory } from '@/lib/file-utils'
 import { STORAGE_BUCKET } from '@/lib/storage'
 import { createClient } from '@/lib/supabase/server'
+import { renameSchema } from '@/lib/validations/files'
 
 export type ActionResult = { success: true } | { error: string }
 
@@ -44,6 +46,53 @@ export async function registerUpload(input: {
   revalidatePath('/files')
   revalidatePath('/dashboard')
   return { success: true }
+}
+
+/** Renames a file (DB only — the storage object keeps its opaque path). */
+export async function renameFile(id: string, name: string): Promise<ActionResult> {
+  const user = await requireUser()
+
+  const parsed = renameSchema.safeParse({ name })
+  if (!parsed.success) {
+    return { error: z.flattenError(parsed.error).fieldErrors.name?.[0] ?? 'Invalid name' }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('files')
+    .update({ name: parsed.data.name, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('owner_id', user.id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/files')
+  return { success: true }
+}
+
+/** Returns a short-lived signed URL that force-downloads the file. */
+export async function getDownloadUrl(
+  id: string,
+): Promise<{ url: string } | { error: string }> {
+  const user = await requireUser()
+  const supabase = await createClient()
+
+  const { data: file } = await supabase
+    .from('files')
+    .select('storage_path, name, owner_id')
+    .eq('id', id)
+    .single()
+
+  if (!file || file.owner_id !== user.id) {
+    return { error: 'File not found.' }
+  }
+
+  const { data, error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUrl(file.storage_path, 60, { download: file.name })
+
+  if (error || !data) return { error: 'Could not create download link.' }
+  return { url: data.signedUrl }
 }
 
 /** Deletes a file (Storage object + DB row). RLS + ownership check enforced. */
