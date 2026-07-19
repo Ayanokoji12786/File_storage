@@ -60,6 +60,7 @@ export function PreviewDialog({
               name: file.name,
               mimeType: file.mimeType,
               category: file.category,
+              size: file.size,
             }}
             url={url}
           />

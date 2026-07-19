@@ -1,16 +1,29 @@
-import { FileQuestion } from 'lucide-react'
-
 import type { FileCategory } from '@/types'
+
+import { DocxPreview } from './previews/docx-preview'
+import { MarkdownPreview } from './previews/markdown-preview'
+import { PreviewMessage } from './previews/shared'
+import { TextPreview } from './previews/text-preview'
+import { XlsxPreview } from './previews/xlsx-preview'
 
 interface PreviewFile {
   name: string
   mimeType: string
   category: FileCategory
+  size?: number
 }
 
+/** Extensions rendered as plain text/code. */
+const TEXT_EXTS = new Set([
+  'txt', 'csv', 'log', 'json', 'yml', 'yaml', 'xml', 'sql', 'sh',
+  'js', 'ts', 'jsx', 'tsx', 'py', 'java', 'c', 'cpp', 'h', 'rb', 'go', 'rs',
+  'css', 'html', 'env', 'ini', 'toml',
+])
+
 /**
- * Renders an inline preview for a file given a (signed) URL. Falls back to an
- * icon for unsupported types. Shared by the in-app dialog and the share page.
+ * Renders an inline preview for a file given a (signed) URL: images, video,
+ * audio, PDF, Markdown, Word, Excel, and text/code — icon fallback otherwise.
+ * Shared by the in-app dialog and the public share page.
  */
 export function FilePreview({
   file,
@@ -19,6 +32,10 @@ export function FilePreview({
   file: PreviewFile
   url: string
 }) {
+  const ext = file.name.includes('.')
+    ? (file.name.split('.').pop() ?? '').toLowerCase()
+    : ''
+
   if (file.category === 'image') {
     return (
       // eslint-disable-next-line @next/next/no-img-element -- signed URL, not optimizable
@@ -54,10 +71,12 @@ export function FilePreview({
     )
   }
 
-  return (
-    <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed p-12 text-center text-muted-foreground">
-      <FileQuestion className="size-10" />
-      <p className="text-sm">No preview available for this file type.</p>
-    </div>
-  )
+  if (ext === 'md' || ext === 'markdown') return <MarkdownPreview url={url} />
+  if (ext === 'docx') return <DocxPreview url={url} />
+  if (ext === 'xlsx') return <XlsxPreview url={url} />
+  if (TEXT_EXTS.has(ext) || file.mimeType.startsWith('text/')) {
+    return <TextPreview url={url} size={file.size} />
+  }
+
+  return <PreviewMessage message="No preview available for this file type." />
 }

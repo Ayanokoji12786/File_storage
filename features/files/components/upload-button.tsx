@@ -2,7 +2,14 @@
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, CircleAlert, Loader2, UploadCloud } from 'lucide-react'
+import type { Session } from '@supabase/supabase-js'
+import {
+  CheckCircle2,
+  CircleAlert,
+  Copy,
+  Loader2,
+  UploadCloud,
+} from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
@@ -17,18 +24,20 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { MAX_FILE_SIZE } from '@/lib/constants'
 import { formatBytes } from '@/lib/file-utils'
+import { sha256Hex } from '@/lib/hash'
 import { uploadToStorage } from '@/lib/storage'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
-import { registerUpload } from '../actions'
+import { findDuplicate, registerUpload } from '../actions'
 
 interface UploadItem {
   id: string
   name: string
   progress: number
-  status: 'uploading' | 'done' | 'error'
+  status: 'checking' | 'uploading' | 'duplicate' | 'done' | 'error'
   error?: string
+  duplicateOf?: string
 }
 
 export function UploadButton() {
@@ -37,9 +46,41 @@ export function UploadButton() {
   const [items, setItems] = useState<UploadItem[]>([])
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  // Files parked as duplicates, kept around for "Upload anyway".
+  const parked = useRef(new Map<string, { file: File; hash: string }>())
 
   function patch(id: string, changes: Partial<UploadItem>) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...changes } : it)))
+  }
+
+  async function uploadOne(
+    itemId: string,
+    file: File,
+    hash: string,
+    session: Session,
+  ) {
+    patch(itemId, { status: 'uploading', progress: 0 })
+
+    const ext = file.name.includes('.') ? `.${file.name.split('.').pop()}` : ''
+    const path = `${session.user.id}/${crypto.randomUUID()}${ext}`
+
+    await uploadToStorage({
+      token: session.access_token,
+      path,
+      file,
+      onProgress: (percent) => patch(itemId, { progress: percent }),
+    })
+
+    const result = await registerUpload({
+      storagePath: path,
+      name: file.name,
+      size: file.size,
+      mimeType: file.type,
+      contentHash: hash,
+    })
+    if ('error' in result) throw new Error(result.error)
+
+    patch(itemId, { progress: 100, status: 'done' })
   }
 
   async function handleFiles(fileList: FileList | null) {
@@ -77,29 +118,20 @@ export function UploadButton() {
 
       setItems((prev) => [
         ...prev,
-        { id: itemId, name: file.name, progress: 0, status: 'uploading' },
+        { id: itemId, name: file.name, progress: 0, status: 'checking' },
       ])
 
-      const ext = file.name.includes('.') ? `.${file.name.split('.').pop()}` : ''
-      const path = `${session.user.id}/${crypto.randomUUID()}${ext}`
-
       try {
-        await uploadToStorage({
-          token: session.access_token,
-          path,
-          file,
-          onProgress: (percent) => patch(itemId, { progress: percent }),
-        })
+        const hash = await sha256Hex(file)
+        const { duplicate } = await findDuplicate(hash)
 
-        const result = await registerUpload({
-          storagePath: path,
-          name: file.name,
-          size: file.size,
-          mimeType: file.type,
-        })
-        if ('error' in result) throw new Error(result.error)
+        if (duplicate) {
+          parked.current.set(itemId, { file, hash })
+          patch(itemId, { status: 'duplicate', duplicateOf: duplicate.name })
+          continue
+        }
 
-        patch(itemId, { progress: 100, status: 'done' })
+        await uploadOne(itemId, file, hash, session)
       } catch (err) {
         patch(itemId, {
           status: 'error',
@@ -111,12 +143,41 @@ export function UploadButton() {
     router.refresh()
   }
 
+  async function uploadAnyway(itemId: string) {
+    const entry = parked.current.get(itemId)
+    if (!entry) return
+    parked.current.delete(itemId)
+
+    const supabase = createClient()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session) {
+      toast.error('Your session expired — please sign in again.')
+      return
+    }
+
+    try {
+      await uploadOne(itemId, entry.file, entry.hash, session)
+      router.refresh()
+    } catch (err) {
+      patch(itemId, {
+        status: 'error',
+        error: err instanceof Error ? err.message : 'Upload failed',
+      })
+    }
+  }
+
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
         setOpen(next)
-        if (!next) setItems([])
+        if (!next) {
+          setItems([])
+          parked.current.clear()
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -178,11 +239,30 @@ export function UploadButton() {
                 <div className="flex items-center gap-2 text-sm">
                   <StatusIcon status={item.status} />
                   <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {item.status === 'error' ? item.error : `${item.progress}%`}
-                  </span>
+                  {item.status === 'duplicate' ? (
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      onClick={() => uploadAnyway(item.id)}
+                    >
+                      Upload anyway
+                    </Button>
+                  ) : (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {item.status === 'error'
+                        ? item.error
+                        : item.status === 'checking'
+                          ? 'Checking…'
+                          : `${item.progress}%`}
+                    </span>
+                  )}
                 </div>
-                {item.status !== 'error' && (
+                {item.status === 'duplicate' && (
+                  <p className="pl-6 text-xs text-amber-600 dark:text-amber-500">
+                    Duplicate of “{item.duplicateOf}” — skipped
+                  </p>
+                )}
+                {(item.status === 'uploading' || item.status === 'done') && (
                   <Progress value={item.progress} className="h-1.5" />
                 )}
               </li>
@@ -197,5 +277,7 @@ export function UploadButton() {
 function StatusIcon({ status }: { status: UploadItem['status'] }) {
   if (status === 'done') return <CheckCircle2 className="size-4 text-emerald-500" />
   if (status === 'error') return <CircleAlert className="size-4 text-destructive" />
+  if (status === 'duplicate')
+    return <Copy className="size-4 text-amber-600 dark:text-amber-500" />
   return <Loader2 className="size-4 animate-spin text-muted-foreground" />
 }

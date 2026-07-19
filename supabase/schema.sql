@@ -11,12 +11,18 @@ create table if not exists public.files (
   mime_type text not null default '',
   category text not null default 'other',
   is_public boolean not null default false,
+  content_hash text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create index if not exists files_owner_created_idx on public.files (owner_id, created_at desc);
 create index if not exists files_owner_category_idx on public.files (owner_id, category);
+create index if not exists files_owner_hash_idx on public.files (owner_id, content_hash);
+
+-- Migration for databases created before duplicate detection:
+--   alter table public.files add column if not exists content_hash text;
+--   create index if not exists files_owner_hash_idx on public.files (owner_id, content_hash);
 
 -- 2. Row Level Security: each user only touches their own rows
 alter table public.files enable row level security;

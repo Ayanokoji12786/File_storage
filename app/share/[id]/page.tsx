@@ -81,6 +81,7 @@ export default async function SharePage({
               name: data.name,
               mimeType: data.mime_type,
               category: data.category as FileCategory,
+              size: data.size,
             }}
             url={url}
           />

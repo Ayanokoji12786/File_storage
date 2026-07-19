@@ -21,6 +21,7 @@ export async function registerUpload(input: {
   name: string
   size: number
   mimeType: string
+  contentHash?: string
 }): Promise<ActionResult> {
   const user = await requireUser()
 
@@ -32,20 +33,49 @@ export async function registerUpload(input: {
   const supabase = await createClient()
   const category = getFileCategory(input.mimeType, input.name)
 
-  const { error } = await supabase.from('files').insert({
+  const row: Record<string, unknown> = {
     owner_id: user.id,
     name: input.name.slice(0, 255),
     storage_path: input.storagePath,
     size: input.size,
     mime_type: input.mimeType,
     category,
-  })
+  }
+  // Only include when present so inserts keep working if the content_hash
+  // migration hasn't been applied yet.
+  if (input.contentHash) row.content_hash = input.contentHash
+
+  const { error } = await supabase.from('files').insert(row)
 
   if (error) return { error: error.message }
 
   revalidatePath('/files')
   revalidatePath('/dashboard')
   return { success: true }
+}
+
+/**
+ * Duplicate check: does the current user already have a file with this
+ * SHA-256 content hash? Returns null (never an error) if the column is
+ * missing (pre-migration) so uploads degrade gracefully.
+ */
+export async function findDuplicate(
+  contentHash: string,
+): Promise<{ duplicate: { id: string; name: string } | null }> {
+  const user = await requireUser()
+  if (!/^[a-f0-9]{64}$/.test(contentHash)) return { duplicate: null }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('files')
+    .select('id, name')
+    .eq('owner_id', user.id)
+    .eq('content_hash', contentHash)
+    .limit(1)
+    .maybeSingle()
+
+  if (error || !data) return { duplicate: null }
+  return { duplicate: data }
 }
 
 /** Renames a file (DB only — the storage object keeps its opaque path). */
