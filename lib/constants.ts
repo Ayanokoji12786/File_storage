@@ -34,11 +34,11 @@ export const FILE_CATEGORIES: FileCategory[] = [
  */
 export const CATEGORY_META: Record<
   FileCategory,
-  { label: string; plural: string; color: string }
+  { label: string; plural: string; color: string; bg: string }
 > = {
-  image: { label: 'Image', plural: 'Images', color: 'text-sky-500' },
-  document: { label: 'Document', plural: 'Documents', color: 'text-amber-500' },
-  video: { label: 'Video', plural: 'Videos', color: 'text-rose-500' },
-  audio: { label: 'Audio', plural: 'Audio', color: 'text-violet-500' },
-  other: { label: 'Other', plural: 'Other', color: 'text-emerald-500' },
+  image: { label: 'Image', plural: 'Images', color: 'text-sky-500', bg: 'bg-sky-500' },
+  document: { label: 'Document', plural: 'Documents', color: 'text-primary', bg: 'bg-primary' },
+  video: { label: 'Video', plural: 'Videos', color: 'text-emerald-500', bg: 'bg-emerald-500' },
+  audio: { label: 'Audio', plural: 'Audio', color: 'text-violet-500', bg: 'bg-violet-500' },
+  other: { label: 'Other', plural: 'Other', color: 'text-slate-500', bg: 'bg-slate-500' },
 }
