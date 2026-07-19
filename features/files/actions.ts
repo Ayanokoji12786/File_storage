@@ -70,6 +70,51 @@ export async function renameFile(id: string, name: string): Promise<ActionResult
   return { success: true }
 }
 
+/** Returns a short-lived signed URL for inline preview (image/video/pdf/…). */
+export async function getPreviewUrl(
+  id: string,
+): Promise<{ url: string } | { error: string }> {
+  const user = await requireUser()
+  const supabase = await createClient()
+
+  const { data: file } = await supabase
+    .from('files')
+    .select('storage_path, owner_id')
+    .eq('id', id)
+    .single()
+
+  if (!file || file.owner_id !== user.id) {
+    return { error: 'File not found.' }
+  }
+
+  const { data, error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUrl(file.storage_path, 300)
+
+  if (error || !data) return { error: 'Could not load preview.' }
+  return { url: data.signedUrl }
+}
+
+/** Toggles a file's public-share flag (owner only). */
+export async function setFilePublic(
+  id: string,
+  isPublic: boolean,
+): Promise<ActionResult> {
+  const user = await requireUser()
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('files')
+    .update({ is_public: isPublic, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('owner_id', user.id)
+
+  if (error) return { error: error.message }
+
+  revalidatePath('/files')
+  return { success: true }
+}
+
 /** Returns a short-lived signed URL that force-downloads the file. */
 export async function getDownloadUrl(
   id: string,

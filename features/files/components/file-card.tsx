@@ -10,6 +10,7 @@ import {
   MoreVertical,
   Music,
   Pencil,
+  Share2,
   Trash2,
   Video,
   type LucideIcon,
@@ -29,7 +30,9 @@ import { formatBytes, formatDate } from '@/lib/file-utils'
 import type { DriveFile, FileCategory } from '@/types'
 
 import { deleteFile, getDownloadUrl } from '../actions'
+import { PreviewDialog } from './preview-dialog'
 import { RenameDialog } from './rename-dialog'
+import { ShareDialog } from './share-dialog'
 
 const CATEGORY_ICON: Record<FileCategory, LucideIcon> = {
   image: ImageIcon,
@@ -41,7 +44,9 @@ const CATEGORY_ICON: Record<FileCategory, LucideIcon> = {
 
 export function FileCard({ file }: { file: DriveFile }) {
   const [isPending, startTransition] = useTransition()
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const Icon = CATEGORY_ICON[file.category]
   const meta = CATEGORY_META[file.category]
 
@@ -71,7 +76,10 @@ export function FileCard({ file }: { file: DriveFile }) {
 
   return (
     <>
-      <div className="group relative rounded-2xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
+      <div
+        onClick={() => setPreviewOpen(true)}
+        className="group relative cursor-pointer rounded-2xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
+      >
         <div className="flex items-start justify-between">
           <span
             className={`grid size-11 place-items-center rounded-full ${meta.bg}`}
@@ -80,7 +88,7 @@ export function FileCard({ file }: { file: DriveFile }) {
           </span>
 
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -95,10 +103,17 @@ export function FileCard({ file }: { file: DriveFile }) {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent
+              align="end"
+              onClick={(e) => e.stopPropagation()}
+            >
               <DropdownMenuItem onSelect={handleDownload}>
                 <Download className="size-4" />
                 Download
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setShareOpen(true)}>
+                <Share2 className="size-4" />
+                Share
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
                 <Pencil className="size-4" />
@@ -121,7 +136,9 @@ export function FileCard({ file }: { file: DriveFile }) {
         </p>
       </div>
 
+      <PreviewDialog file={file} open={previewOpen} onOpenChange={setPreviewOpen} />
       <RenameDialog file={file} open={renameOpen} onOpenChange={setRenameOpen} />
+      <ShareDialog file={file} open={shareOpen} onOpenChange={setShareOpen} />
     </>
   )
 }
