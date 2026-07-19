@@ -16,9 +16,11 @@ import { StorageMeter } from './storage-meter'
  */
 export function AppSidebar({
   user,
+  storageUsed = 0,
   onNavigate,
 }: {
   user: AuthUser
+  storageUsed?: number
   onNavigate?: () => void
 }) {
   return (
@@ -40,7 +42,7 @@ export function AppSidebar({
       </Suspense>
 
       <div className="space-y-3">
-        <StorageMeter />
+        <StorageMeter used={storageUsed} />
         <SidebarProfile user={user} />
       </div>
     </div>

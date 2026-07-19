@@ -95,3 +95,55 @@ export async function getFiles({
   }
   return { files: (data as FileRow[]).map(mapRow), total: count ?? 0 }
 }
+
+export interface StorageStats {
+  totalSize: number
+  totalCount: number
+  byCategory: Record<FileCategory, { count: number; size: number }>
+}
+
+function emptyByCategory(): StorageStats['byCategory'] {
+  return {
+    image: { count: 0, size: 0 },
+    document: { count: 0, size: 0 },
+    video: { count: 0, size: 0 },
+    audio: { count: 0, size: 0 },
+    other: { count: 0, size: 0 },
+  }
+}
+
+/** Aggregates the user's files: total size/count and per-category breakdown. */
+export async function getStorageStats(): Promise<StorageStats> {
+  await requireUser()
+  const supabase = await createClient()
+
+  const { data, error } = await supabase.from('files').select('category, size')
+  const byCategory = emptyByCategory()
+  if (error || !data) return { totalSize: 0, totalCount: 0, byCategory }
+
+  let totalSize = 0
+  for (const row of data as { category: string; size: number }[]) {
+    const category = (
+      row.category in byCategory ? row.category : 'other'
+    ) as FileCategory
+    byCategory[category].count += 1
+    byCategory[category].size += row.size
+    totalSize += row.size
+  }
+
+  return { totalSize, totalCount: data.length, byCategory }
+}
+
+/** The user's most recent uploads. */
+export async function getRecentFiles(limit = 6): Promise<DriveFile[]> {
+  await requireUser()
+  const supabase = await createClient()
+
+  const { data } = await supabase
+    .from('files')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  return (data as FileRow[] | null)?.map(mapRow) ?? []
+}

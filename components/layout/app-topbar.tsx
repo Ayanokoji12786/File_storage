@@ -18,7 +18,13 @@ import { AppSidebar } from './app-sidebar'
 import { SearchBar } from './search-bar'
 import { ThemeToggle } from './theme-toggle'
 
-export function AppTopbar({ user }: { user: AuthUser }) {
+export function AppTopbar({
+  user,
+  storageUsed = 0,
+}: {
+  user: AuthUser
+  storageUsed?: number
+}) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
@@ -37,7 +43,11 @@ export function AppTopbar({ user }: { user: AuthUser }) {
         </SheetTrigger>
         <SheetContent side="left" className="w-72 p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <AppSidebar user={user} onNavigate={() => setMobileOpen(false)} />
+          <AppSidebar
+            user={user}
+            storageUsed={storageUsed}
+            onNavigate={() => setMobileOpen(false)}
+          />
         </SheetContent>
       </Sheet>
 
