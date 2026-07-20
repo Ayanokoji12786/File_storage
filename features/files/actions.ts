@@ -22,7 +22,7 @@ export async function registerUpload(input: {
   size: number
   mimeType: string
   contentHash?: string
-}): Promise<ActionResult> {
+}): Promise<{ fileId: string } | { error: string }> {
   const user = await requireUser()
 
   // Security: the object must live in the user's own folder.
@@ -45,13 +45,17 @@ export async function registerUpload(input: {
   // migration hasn't been applied yet.
   if (input.contentHash) row.content_hash = input.contentHash
 
-  const { error } = await supabase.from('files').insert(row)
+  const { data, error } = await supabase
+    .from('files')
+    .insert(row)
+    .select('id')
+    .single()
 
-  if (error) return { error: error.message }
+  if (error || !data) return { error: error?.message ?? 'Upload failed.' }
 
   revalidatePath('/files')
   revalidatePath('/dashboard')
-  return { success: true }
+  return { fileId: data.id as string }
 }
 
 /**

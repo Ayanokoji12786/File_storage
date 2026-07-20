@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   LayoutDashboard,
   Music,
+  Sparkles,
   Video,
   type LucideIcon,
 } from 'lucide-react'
@@ -17,6 +18,7 @@ import { cn } from '@/lib/utils'
 const MAIN_ITEMS = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'My Files', href: '/files', icon: Files },
+  { label: 'Ask AI', href: '/ai', icon: Sparkles },
 ]
 
 const CATEGORY_ITEMS = [

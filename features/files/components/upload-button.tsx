@@ -29,6 +29,8 @@ import { uploadToStorage } from '@/lib/storage'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
+import { indexFile } from '@/features/ai/actions'
+
 import { findDuplicate, registerUpload } from '../actions'
 
 interface UploadItem {
@@ -79,6 +81,9 @@ export function UploadButton() {
       contentHash: hash,
     })
     if ('error' in result) throw new Error(result.error)
+
+    // Kick off AI indexing in the background — never blocks the upload UI.
+    void indexFile(result.fileId).catch(() => {})
 
     patch(itemId, { progress: 100, status: 'done' })
   }

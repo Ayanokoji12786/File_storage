@@ -4,7 +4,11 @@ import { updateSession } from '@/lib/supabase/proxy'
 
 /** Routes that require an authenticated user. */
 function isProtectedRoute(pathname: string): boolean {
-  return pathname.startsWith('/dashboard') || pathname.startsWith('/files')
+  return (
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/files') ||
+    pathname.startsWith('/ai')
+  )
 }
 
 /** Auth screens an already-signed-in user shouldn't see. */

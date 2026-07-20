@@ -38,4 +38,16 @@ export const env = {
   get siteUrl() {
     return process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
   },
+  /** Server-only. Gemini powers AI chat, OCR, and auto-categorization. */
+  get geminiApiKey() {
+    return required('GEMINI_API_KEY', process.env.GEMINI_API_KEY)
+  },
+  /** Server-only. Optional alternative LLM provider to Gemini. */
+  get anthropicApiKey() {
+    return required('ANTHROPIC_API_KEY', process.env.ANTHROPIC_API_KEY)
+  },
+  /** Server-only. Powers embeddings for semantic search. */
+  get voyageApiKey() {
+    return required('VOYAGE_API_KEY', process.env.VOYAGE_API_KEY)
+  },
 }

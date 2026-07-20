@@ -51,3 +51,61 @@ create policy "read own objects" on storage.objects
 create policy "delete own objects" on storage.objects
   for delete to authenticated
   using (bucket_id = 'files' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ------------------------------------------------------------------
+-- AI: semantic index (pgvector). Run this whole block as a migration
+-- on databases created before the AI features.
+-- ------------------------------------------------------------------
+
+create extension if not exists vector;
+
+alter table public.files add column if not exists index_status text not null default 'pending';
+
+create table if not exists public.file_chunks (
+  id uuid primary key default gen_random_uuid(),
+  file_id uuid not null references public.files(id) on delete cascade,
+  owner_id uuid not null,
+  chunk_index int not null,
+  content text not null,
+  embedding vector(1024),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists file_chunks_file_idx on public.file_chunks (file_id);
+create index if not exists file_chunks_owner_idx on public.file_chunks (owner_id);
+
+alter table public.file_chunks enable row level security;
+
+drop policy if exists "read own chunks" on public.file_chunks;
+create policy "read own chunks" on public.file_chunks
+  for select to authenticated
+  using ((select auth.uid()) = owner_id);
+
+create or replace function public.match_file_chunks(
+  query_embedding vector(1024),
+  match_owner_id uuid,
+  match_count int default 8
+)
+returns table (
+  id uuid,
+  file_id uuid,
+  chunk_index int,
+  content text,
+  similarity double precision
+)
+language sql stable
+as $$
+  select
+    fc.id,
+    fc.file_id,
+    fc.chunk_index,
+    fc.content,
+    1 - (fc.embedding <=> query_embedding) as similarity
+  from public.file_chunks fc
+  where fc.owner_id = match_owner_id
+    and fc.embedding is not null
+  order by fc.embedding <=> query_embedding
+  limit match_count;
+$$;
+
+notify pgrst, 'reload schema';
