@@ -13,8 +13,9 @@ export const CHUNK_UPLOAD_THRESHOLD = 6 * 1024 * 1024 // 6 MB
 /** Size of each chunk sent over the resumable upload protocol. */
 export const CHUNK_SIZE = 6 * 1024 * 1024 // 6 MB
 
-/** Storage quota granted to each user (bytes). */
-export const STORAGE_QUOTA = 2 * 1024 * 1024 * 1024 // 2 GB
+/** Storage quota granted to each user (bytes). Matches MAX_FILE_SIZE so a
+ * single max-size upload doesn't get rejected purely by the quota check. */
+export const STORAGE_QUOTA = 20 * 1024 * 1024 * 1024 // 20 GB
 
 /** Days a file sits in Trash before it's purged for good. */
 export const TRASH_RETENTION_DAYS = 30
