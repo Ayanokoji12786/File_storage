@@ -38,11 +38,15 @@ export const env = {
   get siteUrl() {
     return process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
   },
-  /** Server-only. Gemini powers AI chat, OCR, and auto-categorization. */
+  /** Server-only. Primary LLM provider — chat, OCR, and auto-categorization. */
+  get groqApiKey() {
+    return required('GROQ_API_KEY', process.env.GROQ_API_KEY)
+  },
+  /** Server-only. Fallback LLM provider if Groq isn't configured or fails. */
   get geminiApiKey() {
     return required('GEMINI_API_KEY', process.env.GEMINI_API_KEY)
   },
-  /** Server-only. Optional alternative LLM provider to Gemini. */
+  /** Server-only. Fallback LLM provider if Groq/Gemini aren't configured or fail. */
   get anthropicApiKey() {
     return required('ANTHROPIC_API_KEY', process.env.ANTHROPIC_API_KEY)
   },

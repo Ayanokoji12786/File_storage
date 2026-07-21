@@ -36,92 +36,96 @@ export interface AiProvider {
   }): Promise<string>
 }
 
+type ProviderName = 'groq' | 'gemini' | 'anthropic'
+
+/**
+ * Priority order: Groq first (fast, generous free tier), then Gemini, then
+ * Anthropic (paid, no free tier) — each configured key becomes an automatic
+ * fallback for the ones before it.
+ */
+const PRIORITY: { name: ProviderName; envVar: string }[] = [
+  { name: 'groq', envVar: 'GROQ_API_KEY' },
+  { name: 'gemini', envVar: 'GEMINI_API_KEY' },
+  { name: 'anthropic', envVar: 'ANTHROPIC_API_KEY' },
+]
+
 /** True when the app has some LLM configured (chat/OCR/classification). */
 export function hasAiProvider(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY || process.env.ANTHROPIC_API_KEY)
+  return PRIORITY.some(({ envVar }) => Boolean(process.env[envVar]))
 }
 
-async function loadProvider(name: 'gemini' | 'anthropic'): Promise<AiProvider> {
+async function loadProvider(name: ProviderName): Promise<AiProvider> {
+  if (name === 'groq') return (await import('./groq')).groqProvider
   if (name === 'gemini') return (await import('./gemini')).geminiProvider
   return (await import('./anthropic')).anthropicProvider
 }
 
 /**
- * Wraps a primary provider so a failure (e.g. "the model is overloaded" —
- * common on Gemini's free tier under load) transparently retries once with
- * the other configured provider instead of failing the whole request.
+ * Chains providers in priority order so a failure (e.g. "the model is
+ * overloaded" — common on a free tier under load) transparently retries with
+ * the next configured provider instead of failing the whole request.
  *
- * For streamChat specifically: only retry if the primary hasn't yielded any
- * text yet. Once partial output has reached the client, restarting from the
- * fallback would duplicate/garble the response, so at that point we just let
- * the error surface as before.
+ * For streamChat specifically: only retry if the current provider hasn't
+ * yielded any text yet. Once partial output has reached the client,
+ * restarting from a fallback would duplicate/garble the response, so at that
+ * point we just let the error surface as before.
  */
-function withFallback(primary: AiProvider, fallback: AiProvider): AiProvider {
+function chainProviders(providers: AiProvider[]): AiProvider {
+  const [current, ...rest] = providers
+  if (rest.length === 0) return current
+  const next = chainProviders(rest)
+
   return {
-    name: primary.name,
+    name: current.name,
 
     async *streamChat(input) {
       let yielded = false
       try {
-        for await (const chunk of primary.streamChat(input)) {
+        for await (const chunk of current.streamChat(input)) {
           yielded = true
           yield chunk
         }
         return
       } catch (err) {
         if (yielded) throw err
-        console.error(`${primary.name} failed, retrying with ${fallback.name}:`, err)
+        console.error(`${current.name} failed, retrying with ${next.name}:`, err)
       }
-      yield* fallback.streamChat(input)
+      yield* next.streamChat(input)
     },
 
     async generateText(input) {
       try {
-        return await primary.generateText(input)
+        return await current.generateText(input)
       } catch (err) {
-        console.error(`${primary.name} failed, retrying with ${fallback.name}:`, err)
-        return fallback.generateText(input)
+        console.error(`${current.name} failed, retrying with ${next.name}:`, err)
+        return next.generateText(input)
       }
     },
 
     async readImage(input) {
       try {
-        return await primary.readImage(input)
+        return await current.readImage(input)
       } catch (err) {
-        console.error(`${primary.name} failed, retrying with ${fallback.name}:`, err)
-        return fallback.readImage(input)
+        console.error(`${current.name} failed, retrying with ${next.name}:`, err)
+        return next.readImage(input)
       }
     },
   }
 }
 
 /**
- * Picks the configured provider. Gemini wins when both are set because it has
- * a usable free tier; Anthropic is used when it's the only key present. When
- * both are configured, the unused one becomes an automatic fallback.
+ * Picks the provider chain from whichever keys are configured, in priority
+ * order (see PRIORITY above). The first configured provider is primary;
+ * any others configured become automatic fallbacks.
  */
 export async function getAiProvider(): Promise<AiProvider> {
-  const primaryName = process.env.GEMINI_API_KEY
-    ? 'gemini'
-    : process.env.ANTHROPIC_API_KEY
-      ? 'anthropic'
-      : null
-  if (!primaryName) {
+  const configured = PRIORITY.filter(({ envVar }) => process.env[envVar])
+  if (configured.length === 0) {
     throw new Error(
-      'No AI provider configured. Set GEMINI_API_KEY (free at aistudio.google.com) or ANTHROPIC_API_KEY in .env.local.',
+      'No AI provider configured. Set GROQ_API_KEY (free at console.groq.com), GEMINI_API_KEY (free at aistudio.google.com), or ANTHROPIC_API_KEY in .env.local.',
     )
   }
 
-  const primary = await loadProvider(primaryName)
-
-  const fallbackName =
-    primaryName === 'gemini' && process.env.ANTHROPIC_API_KEY
-      ? 'anthropic'
-      : primaryName === 'anthropic' && process.env.GEMINI_API_KEY
-        ? 'gemini'
-        : null
-  if (!fallbackName) return primary
-
-  const fallback = await loadProvider(fallbackName)
-  return withFallback(primary, fallback)
+  const providers = await Promise.all(configured.map(({ name }) => loadProvider(name)))
+  return chainProviders(providers)
 }
