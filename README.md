@@ -1,5 +1,7 @@
 # Nimbus — a Google Drive clone
 
+**Live:** [file-storage-livid.vercel.app](https://file-storage-livid.vercel.app)
+
 A modern, minimal cloud storage app built with **Next.js 16** and **Supabase**.
 Upload, organize, preview, and share your files — with per-user isolation
 enforced at the database with Row Level Security.
