@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useState } from 'react'
-import { LogOut, Menu } from 'lucide-react'
+import { Menu } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -11,19 +11,22 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 import { UploadButton } from '@/features/files/components/upload-button'
-import { signOut } from '@/lib/actions/auth'
-import type { AuthUser } from '@/types'
+import { NotificationBell } from '@/features/notifications/components/notification-bell'
+import type { AuthUser, DriveNotification } from '@/types'
 
 import { AppSidebar } from './app-sidebar'
 import { SearchBar } from './search-bar'
+import { SignOutButton } from './sign-out-button'
 import { ThemeToggle } from './theme-toggle'
 
 export function AppTopbar({
   user,
   storageUsed = 0,
+  notifications = [],
 }: {
   user: AuthUser
   storageUsed?: number
+  notifications?: DriveNotification[]
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -58,18 +61,9 @@ export function AppTopbar({
       </div>
 
       <UploadButton />
+      <NotificationBell userId={user.id} initial={notifications} />
       <ThemeToggle />
-      <form action={signOut}>
-        <Button
-          variant="ghost"
-          size="icon"
-          type="submit"
-          className="text-primary"
-          aria-label="Sign out"
-        >
-          <LogOut className="size-5" />
-        </Button>
-      </form>
+      <SignOutButton />
     </header>
   )
 }

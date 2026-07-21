@@ -1,3 +1,6 @@
+import * as tus from 'tus-js-client'
+
+import { CHUNK_SIZE } from '@/lib/constants'
 import { env } from '@/lib/env'
 
 export const STORAGE_BUCKET = 'files'
@@ -18,7 +21,7 @@ export function uploadToStorage({
 }: {
   token: string
   path: string
-  file: File
+  file: Blob
   onProgress?: (percent: number) => void
   signal?: AbortSignal
 }): Promise<void> {
@@ -55,6 +58,68 @@ export function uploadToStorage({
     }
 
     xhr.send(file)
+  })
+}
+
+/**
+ * Uploads via Supabase Storage's resumable (TUS) endpoint — chunked, so large
+ * files upload in ~6MB pieces and can survive a dropped connection. Used for
+ * anything at or above `CHUNK_UPLOAD_THRESHOLD`, up to `MAX_FILE_SIZE` (20GB).
+ */
+export function uploadToStorageChunked({
+  token,
+  path,
+  file,
+  contentType,
+  onProgress,
+  signal,
+}: {
+  token: string
+  path: string
+  file: Blob
+  contentType: string
+  onProgress?: (percent: number) => void
+  signal?: AbortSignal
+}): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const upload = new tus.Upload(file, {
+      endpoint: `${env.supabaseUrl}/storage/v1/upload/resumable`,
+      retryDelays: [0, 1000, 3000, 5000],
+      chunkSize: CHUNK_SIZE,
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      headers: {
+        authorization: `Bearer ${token}`,
+        apikey: env.supabaseAnonKey,
+        'x-upsert': 'false',
+      },
+      metadata: {
+        bucketName: STORAGE_BUCKET,
+        objectName: path,
+        contentType: contentType || 'application/octet-stream',
+        cacheControl: '3600',
+      },
+      onError: (error) => reject(error),
+      onProgress: (bytesSent, bytesTotal) => {
+        if (onProgress) onProgress(Math.round((bytesSent / bytesTotal) * 100))
+      },
+      onSuccess: () => resolve(),
+    })
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        upload.abort()
+        reject(new Error('Upload cancelled'))
+      })
+    }
+
+    upload
+      .findPreviousUploads()
+      .then((previous) => {
+        if (previous.length > 0) upload.resumeFromPreviousUpload(previous[0])
+        upload.start()
+      })
+      .catch(() => upload.start())
   })
 }
 

@@ -12,6 +12,15 @@ enforced at the database with Row Level Security.
 - **Preview** — inline preview for images, video, audio, and PDF
 - **Sharing** — toggle a public link and share any file with anyone
 - **Dashboard** — storage usage, per-category breakdown, recent uploads
+- **Direct sharing & real-time notifications** — share a file with another user by email; they get a live in-app notification (Supabase Realtime)
+- **Real-time upload progress** — progress broadcasts over a per-user Realtime channel, so any open tab/device shows the same upload in flight
+- **Chunked, resumable uploads** — files ≥6MB upload via Supabase Storage's TUS endpoint in ~6MB chunks, up to 20GB
+- **Client-side compression** — eligible text/document uploads are gzipped in the browser before upload, transparently decompressed on preview/download
+- **Per-file end-to-end encryption** — opt-in AES-GCM encryption in the browser before upload; the passphrase never leaves the client and isn't recoverable if lost
+- **Automatic thumbnails** — client-side canvas-generated WebP thumbnails for images, served through a private, ownership-checked route
+- **QR code sharing** — generate and download a QR code for any public share link
+- **Collaborative presence** — see who else has a file's preview open right now
+- **Offline mode (PWA)** — installable manifest + service worker; mark individual files "available offline" for on-device access without a network round trip
 - **Responsive** — sidebar on desktop, drawer on mobile; light & dark themes
 - **Secure** — Row Level Security, server-side authorization in every action
 
@@ -40,9 +49,26 @@ npm install
 ```
 
 ### 3. Configure the database
-In the Supabase dashboard → **SQL Editor**, run [`supabase/schema.sql`](supabase/schema.sql).
-It creates the `files` table (with RLS policies) and a private `files` storage
-bucket (with per-user folder policies).
+In the Supabase dashboard → **SQL Editor**, run [`supabase/schema.sql`](supabase/schema.sql)
+top to bottom. It's idempotent, so re-running it on a database that already
+has some of these migrations applied is safe. It creates:
+- the `files` table (RLS) + a private `files` storage bucket (per-user folder policies)
+- the AI semantic search columns/tables (pgvector)
+- `profiles` (auto-synced from `auth.users`), `shares`, and `notifications` — needed for
+  direct file sharing and the notification bell (Realtime must be on for the
+  project, which is the default for new Supabase projects)
+- encryption/compression/thumbnail columns on `files`, and raises the Storage
+  bucket's per-object size limit to 20GB for chunked uploads
+- security/scalability hardening: locks `profiles` down to self-only reads,
+  requires an actual share before a notification can be inserted, RLS
+  policies on `realtime.messages` (Realtime Authorization), a `pg_trgm`
+  index for search, a `get_storage_stats()` aggregate, and a `pg_cron` job
+  that purges expired Trash daily
+
+**One step SQL can't do:** the `realtime.messages` policies only take effect
+once **Realtime Authorization** is switched on for the project — Supabase
+dashboard → **Settings → Realtime** → enable it. Without this, the private
+upload-progress and presence channels aren't actually enforced.
 
 ### 4. Configure environment variables
 Copy the template and fill it in:

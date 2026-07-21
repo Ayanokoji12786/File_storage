@@ -1,6 +1,8 @@
 import { AppSidebar } from '@/components/layout/app-sidebar'
 import { AppTopbar } from '@/components/layout/app-topbar'
+import { UploadProgressWidget } from '@/features/files/components/upload-progress-widget'
 import { getStorageStats } from '@/lib/data/files'
+import { getNotifications } from '@/lib/data/notifications'
 import { requireUser } from '@/lib/dal'
 
 export default async function AppLayout({
@@ -10,7 +12,11 @@ export default async function AppLayout({
 }) {
   // Secure gate: redirects to /sign-in if there's no session (proxy handles the
   // optimistic redirect; this is the authoritative check).
-  const [user, stats] = await Promise.all([requireUser(), getStorageStats()])
+  const [user, stats, notifications] = await Promise.all([
+    requireUser(),
+    getStorageStats(),
+    getNotifications(),
+  ])
 
   return (
     <div className="flex min-h-dvh">
@@ -21,9 +27,11 @@ export default async function AppLayout({
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <AppTopbar user={user} storageUsed={stats.totalSize} />
+        <AppTopbar user={user} storageUsed={stats.totalSize} notifications={notifications} />
         <main className="flex-1 p-4 lg:p-6">{children}</main>
       </div>
+
+      <UploadProgressWidget userId={user.id} />
     </div>
   )
 }

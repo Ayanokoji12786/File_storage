@@ -8,6 +8,7 @@ import {
   CircleAlert,
   Copy,
   Loader2,
+  Lock,
   UploadCloud,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -21,12 +22,24 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
-import { MAX_FILE_SIZE } from '@/lib/constants'
+import { Switch } from '@/components/ui/switch'
+import { compressBlob, isCompressible, MIN_COMPRESSIBLE_SIZE } from '@/lib/compression'
+import {
+  CHUNK_UPLOAD_THRESHOLD,
+  MAX_COMPRESS_SIZE,
+  MAX_ENCRYPT_SIZE,
+  MAX_FILE_SIZE,
+} from '@/lib/constants'
+import { encryptBlob } from '@/lib/encryption'
 import { formatBytes } from '@/lib/file-utils'
 import { sha256Hex } from '@/lib/hash'
-import { uploadToStorage } from '@/lib/storage'
+import { broadcastUploadProgress } from '@/lib/realtime/upload-channel'
+import { uploadToStorage, uploadToStorageChunked } from '@/lib/storage'
 import { createClient } from '@/lib/supabase/client'
+import { canThumbnail, generateImageThumbnail } from '@/lib/thumbnail'
 import { cn } from '@/lib/utils'
 
 import { indexFile } from '@/features/ai/actions'
@@ -47,9 +60,14 @@ export function UploadButton() {
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<UploadItem[]>([])
   const [dragging, setDragging] = useState(false)
+  const [encryptEnabled, setEncryptEnabled] = useState(false)
+  const [passphrase, setPassphrase] = useState('')
+  const [confirmPassphrase, setConfirmPassphrase] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   // Files parked as duplicates, kept around for "Upload anyway".
-  const parked = useRef(new Map<string, { file: File; hash: string }>())
+  const parked = useRef(new Map<string, { file: File; hash: string | null }>())
+  const locked = items.length > 0
+  const passphraseValid = passphrase.length >= 8 && passphrase === confirmPassphrase
 
   function patch(id: string, changes: Partial<UploadItem>) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...changes } : it)))
@@ -58,41 +76,118 @@ export function UploadButton() {
   async function uploadOne(
     itemId: string,
     file: File,
-    hash: string,
+    hash: string | null,
     session: Session,
+    encrypting: boolean,
   ) {
     patch(itemId, { status: 'uploading', progress: 0 })
+    const userId = session.user.id
+
+    function report(
+      percent: number,
+      status: 'uploading' | 'done' | 'error' | 'cancelled' = 'uploading',
+    ) {
+      patch(itemId, { progress: percent })
+      void broadcastUploadProgress(userId, { id: itemId, name: file.name, percent, status })
+    }
 
     const ext = file.name.includes('.') ? `.${file.name.split('.').pop()}` : ''
-    const path = `${session.user.id}/${crypto.randomUUID()}${ext}`
+    const path = `${userId}/${crypto.randomUUID()}${ext}`
 
-    await uploadToStorage({
-      token: session.access_token,
-      path,
-      file,
-      onProgress: (percent) => patch(itemId, { progress: percent }),
-    })
+    let uploadBlob: Blob = file
+    let contentType = file.type || 'application/octet-stream'
+    let isEncrypted = false
+    let isCompressed = false
+    let encryptionIv: string | undefined
+    let encryptionSalt: string | undefined
+    let thumbnailPath: string | undefined
+
+    if (encrypting) {
+      const encrypted = await encryptBlob(file, passphrase)
+      uploadBlob = encrypted.ciphertext
+      contentType = 'application/octet-stream'
+      isEncrypted = true
+      encryptionIv = encrypted.iv
+      encryptionSalt = encrypted.salt
+    } else {
+      if (canThumbnail(file.type)) {
+        const thumb = await generateImageThumbnail(file)
+        if (thumb) {
+          const thumbPath = `${userId}/thumbnails/${crypto.randomUUID()}.webp`
+          await uploadToStorage({ token: session.access_token, path: thumbPath, file: thumb })
+          thumbnailPath = thumbPath
+        }
+      }
+
+      if (
+        isCompressible(file.type, file.name) &&
+        file.size > MIN_COMPRESSIBLE_SIZE &&
+        file.size <= MAX_COMPRESS_SIZE
+      ) {
+        const compressed = await compressBlob(file)
+        if (compressed.size < file.size) {
+          uploadBlob = compressed
+          contentType = 'application/gzip'
+          isCompressed = true
+        }
+      }
+    }
+
+    if (uploadBlob.size >= CHUNK_UPLOAD_THRESHOLD) {
+      await uploadToStorageChunked({
+        token: session.access_token,
+        path,
+        file: uploadBlob,
+        contentType,
+        onProgress: (percent) => report(percent),
+      })
+    } else {
+      await uploadToStorage({
+        token: session.access_token,
+        path,
+        file: uploadBlob,
+        onProgress: (percent) => report(percent),
+      })
+    }
 
     const result = await registerUpload({
       storagePath: path,
       name: file.name,
-      size: file.size,
-      mimeType: file.type,
-      contentHash: hash,
+      // Advisory only — the server re-reads the real size from Storage.
+      size: uploadBlob.size,
+      // What the user actually picked, so compressed files display honestly.
+      originalSize: file.size,
+      mimeType: contentType,
+      contentHash: hash ?? undefined,
+      isEncrypted,
+      encryptionIv,
+      encryptionSalt,
+      isCompressed,
+      originalMimeType: isEncrypted || isCompressed ? file.type : undefined,
+      thumbnailPath,
     })
     if ('error' in result) throw new Error(result.error)
 
-    // Kick off AI indexing in the background — never blocks the upload UI.
-    void indexFile(result.fileId).catch(() => {})
+    // Skip AI indexing for encrypted (server never sees plaintext) and
+    // compressed (server-side extraction expects the raw format) uploads.
+    if (!isEncrypted && !isCompressed) {
+      void indexFile(result.fileId).catch(() => {})
+    }
 
-    patch(itemId, { progress: 100, status: 'done' })
+    report(100, 'done')
+    patch(itemId, { status: 'done' })
   }
 
   async function handleFiles(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return
+    if (encryptEnabled && !passphraseValid) {
+      toast.error('Enter matching passphrases (min 8 characters) before uploading.')
+      return
+    }
     // Snapshot now: the caller may reset the input (emptying this live
     // FileList) before the async loop below runs.
     const files = Array.from(fileList)
+    const encrypting = encryptEnabled
 
     const supabase = createClient()
     const {
@@ -107,7 +202,9 @@ export function UploadButton() {
     for (const file of files) {
       const itemId = crypto.randomUUID()
 
-      if (file.size > MAX_FILE_SIZE) {
+      const tooLarge = file.size > MAX_FILE_SIZE
+      const tooLargeToEncrypt = encrypting && file.size > MAX_ENCRYPT_SIZE
+      if (tooLarge || tooLargeToEncrypt) {
         setItems((prev) => [
           ...prev,
           {
@@ -115,7 +212,9 @@ export function UploadButton() {
             name: file.name,
             progress: 0,
             status: 'error',
-            error: `Too large (max ${formatBytes(MAX_FILE_SIZE)})`,
+            error: tooLarge
+              ? `Too large (max ${formatBytes(MAX_FILE_SIZE)})`
+              : `Encrypted uploads max ${formatBytes(MAX_ENCRYPT_SIZE)}`,
           },
         ])
         continue
@@ -127,8 +226,11 @@ export function UploadButton() {
       ])
 
       try {
+        // null for very large files — dedup is skipped rather than OOM-ing.
         const hash = await sha256Hex(file)
-        const { duplicate } = await findDuplicate(hash)
+        const { duplicate } = hash
+          ? await findDuplicate(hash)
+          : { duplicate: null }
 
         if (duplicate) {
           parked.current.set(itemId, { file, hash })
@@ -136,9 +238,16 @@ export function UploadButton() {
           continue
         }
 
-        await uploadOne(itemId, file, hash, session)
+        await uploadOne(itemId, file, hash, session, encrypting)
       } catch (err) {
         patch(itemId, {
+          status: 'error',
+          error: err instanceof Error ? err.message : 'Upload failed',
+        })
+        void broadcastUploadProgress(session.user.id, {
+          id: itemId,
+          name: file.name,
+          percent: 0,
           status: 'error',
           error: err instanceof Error ? err.message : 'Upload failed',
         })
@@ -164,7 +273,7 @@ export function UploadButton() {
     }
 
     try {
-      await uploadOne(itemId, entry.file, entry.hash, session)
+      await uploadOne(itemId, entry.file, entry.hash, session, encryptEnabled)
       router.refresh()
     } catch (err) {
       patch(itemId, {
@@ -182,6 +291,9 @@ export function UploadButton() {
         if (!next) {
           setItems([])
           parked.current.clear()
+          setEncryptEnabled(false)
+          setPassphrase('')
+          setConfirmPassphrase('')
         }
       }}
     >
@@ -199,6 +311,42 @@ export function UploadButton() {
             Drag &amp; drop, or browse. Max {formatBytes(MAX_FILE_SIZE)} per file.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="space-y-2 rounded-xl border p-3">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="encrypt-toggle" className="flex items-center gap-2 font-normal">
+              <Lock className="size-4 text-muted-foreground" />
+              Encrypt these uploads
+            </Label>
+            <Switch
+              id="encrypt-toggle"
+              checked={encryptEnabled}
+              onCheckedChange={setEncryptEnabled}
+              disabled={locked}
+            />
+          </div>
+          {encryptEnabled && (
+            <div className="space-y-2 pt-1">
+              <Input
+                type="password"
+                placeholder="Passphrase (min 8 characters)"
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                disabled={locked}
+              />
+              <Input
+                type="password"
+                placeholder="Confirm passphrase"
+                value={confirmPassphrase}
+                onChange={(e) => setConfirmPassphrase(e.target.value)}
+                disabled={locked}
+              />
+              <p className="text-xs text-muted-foreground">
+                We never see this passphrase and can’t recover it — write it down.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Dropzone */}
         <button

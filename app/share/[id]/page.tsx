@@ -37,6 +37,7 @@ export default async function SharePage({
     .select('name, storage_path, size, mime_type, category, is_public, created_at')
     .eq('id', id)
     .eq('is_public', true)
+    .is('deleted_at', null)
     .single<SharedRow>()
 
   if (!data) notFound()

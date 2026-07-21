@@ -1,6 +1,7 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist_Mono, Poppins } from 'next/font/google'
 
+import { PwaRegister } from '@/components/pwa-register'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { APP_DESCRIPTION, APP_NAME } from '@/lib/constants'
@@ -27,6 +28,15 @@ export const metadata: Metadata = {
     template: `%s · ${APP_NAME}`,
   },
   description: APP_DESCRIPTION,
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'default',
+    title: APP_NAME,
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#e8785a',
 }
 
 export default function RootLayout({
@@ -49,6 +59,7 @@ export default function RootLayout({
         >
           <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
           <Toaster richColors position="top-center" />
+          <PwaRegister />
         </ThemeProvider>
       </body>
     </html>

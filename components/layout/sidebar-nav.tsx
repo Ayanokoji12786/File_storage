@@ -9,7 +9,10 @@ import {
   LayoutDashboard,
   Music,
   Sparkles,
+  Trash2,
+  Users,
   Video,
+  WifiOff,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -18,7 +21,10 @@ import { cn } from '@/lib/utils'
 const MAIN_ITEMS = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'My Files', href: '/files', icon: Files },
+  { label: 'Shared with me', href: '/shared', icon: Users },
   { label: 'Ask AI', href: '/ai', icon: Sparkles },
+  { label: 'Offline files', href: '/offline', icon: WifiOff },
+  { label: 'Trash', href: '/trash', icon: Trash2 },
 ]
 
 const CATEGORY_ITEMS = [
