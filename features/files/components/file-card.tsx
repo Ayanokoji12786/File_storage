@@ -10,6 +10,7 @@ import {
   Lock,
   MoreVertical,
   Music,
+  NotebookPen,
   Pencil,
   Share2,
   Trash2,
@@ -29,6 +30,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { CATEGORY_META } from '@/lib/constants'
 import { decompressBlob } from '@/lib/compression'
+import { isDraftlyEligible } from '@/lib/draftly'
 import { decryptBlob } from '@/lib/encryption'
 import { formatBytes, formatDate } from '@/lib/file-utils'
 import {
@@ -37,6 +39,8 @@ import {
   saveFileOffline,
 } from '@/lib/offline-store'
 import type { DriveFile, FileCategory } from '@/types'
+
+import { DraftlyDialog } from '@/features/draftly/components/draftly-dialog'
 
 import { deleteFile, getDownloadUrl } from '../actions'
 import { PassphraseDialog } from './passphrase-dialog'
@@ -66,11 +70,16 @@ export function FileCard({
   const [passphraseOpen, setPassphraseOpen] = useState(false)
   const [passphraseError, setPassphraseError] = useState<string | null>(null)
   const [unlocking, setUnlocking] = useState(false)
+  const [draftlyOpen, setDraftlyOpen] = useState(false)
   // Starts false to match the server-rendered HTML (Cache Storage doesn't
   // exist server-side), then syncs to the real value after mount.
   const [offline, setOffline] = useState(false)
   const [offlinePending, setOfflinePending] = useState(false)
   const Icon = CATEGORY_ICON[file.category]
+  const draftlyEligible =
+    viewerIsOwner &&
+    Boolean(process.env.NEXT_PUBLIC_DRAFTLY_URL) &&
+    isDraftlyEligible(file.name, file.isEncrypted, file.isCompressed)
   const meta = CATEGORY_META[file.category]
 
   useEffect(() => {
@@ -237,6 +246,12 @@ export function FileCard({
                 <Download className="size-4" />
                 Download
               </DropdownMenuItem>
+              {draftlyEligible && (
+                <DropdownMenuItem onSelect={() => setDraftlyOpen(true)}>
+                  <NotebookPen className="size-4" />
+                  Open with Draftly
+                </DropdownMenuItem>
+              )}
               {!file.isEncrypted && (
                 <DropdownMenuItem onSelect={toggleOffline} disabled={offlinePending}>
                   <WifiOff className="size-4" />
@@ -272,9 +287,17 @@ export function FileCard({
         </p>
       </div>
 
-      <PreviewDialog file={file} open={previewOpen} onOpenChange={setPreviewOpen} />
+      <PreviewDialog
+        file={file}
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        onOpenWithDraftly={draftlyEligible ? () => setDraftlyOpen(true) : undefined}
+      />
       <RenameDialog file={file} open={renameOpen} onOpenChange={setRenameOpen} />
       <ShareDialog file={file} open={shareOpen} onOpenChange={setShareOpen} />
+      {draftlyEligible && (
+        <DraftlyDialog fileId={file.id} open={draftlyOpen} onOpenChange={setDraftlyOpen} />
+      )}
       <PassphraseDialog
         open={passphraseOpen}
         onOpenChange={setPassphraseOpen}

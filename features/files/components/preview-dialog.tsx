@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { RealtimeChannel } from '@supabase/supabase-js'
-import { Loader2, Lock } from 'lucide-react'
+import { Loader2, Lock, NotebookPen } from 'lucide-react'
 
 import {
   Avatar,
@@ -33,10 +33,13 @@ export function PreviewDialog({
   file,
   open,
   onOpenChange,
+  onOpenWithDraftly,
 }: {
   file: DriveFile
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Present only when the file is eligible — renders an "Open with Draftly" button. */
+  onOpenWithDraftly?: () => void
 }) {
   const [url, setUrl] = useState<string | null>(null)
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
@@ -187,15 +190,23 @@ export function PreviewDialog({
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader className="flex-row items-center justify-between gap-4 space-y-0 pr-6">
           <DialogTitle className="min-w-0 flex-1 truncate">{file.name}</DialogTitle>
-          {viewers.length > 0 && (
-            <AvatarGroup>
-              {viewers.slice(0, 4).map((viewer, i) => (
-                <Avatar key={i} size="sm" title={`${viewer.name} is viewing`}>
-                  <AvatarFallback>{viewer.name.slice(0, 1).toUpperCase()}</AvatarFallback>
-                </Avatar>
-              ))}
-            </AvatarGroup>
-          )}
+          <div className="flex shrink-0 items-center gap-3">
+            {onOpenWithDraftly && (
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={onOpenWithDraftly}>
+                <NotebookPen className="size-3.5" />
+                Open with Draftly
+              </Button>
+            )}
+            {viewers.length > 0 && (
+              <AvatarGroup>
+                {viewers.slice(0, 4).map((viewer, i) => (
+                  <Avatar key={i} size="sm" title={`${viewer.name} is viewing`}>
+                    <AvatarFallback>{viewer.name.slice(0, 1).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                ))}
+              </AvatarGroup>
+            )}
+          </div>
         </DialogHeader>
 
         {error && !needsPassphrase ? (
